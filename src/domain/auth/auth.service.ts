@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/com
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { CustomerService } from '../customer/customer.service';
-import { compare, hash } from 'bcrypt';
+import { compare, genSalt, hash } from 'bcrypt';
 import { Customer } from 'src/lib/entities/customer.entity';
 import { CreateUserInput } from 'src/application/usecases/auth/dto/create-user.input';
 import { AuthResponse } from './dto/auth.dto';
@@ -15,6 +15,7 @@ export class AuthService {
 
   private readonly accessSecret = this.configService.get<string>('JWT_ACCESS_SECRET');
   private readonly refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+  private readonly salt = this.configService.get<number>('SALT');
 
   constructor(
     private configService: ConfigService,
@@ -27,7 +28,7 @@ export class AuthService {
     );
     if (userExists) throw new BadRequestException('email is already registered');
 
-    const hashedPassword = await hash(createUserInput.password, 10);
+    const hashedPassword = await this.encript(createUserInput.password);
     const activationCode = this.generateActivationCode();
     createUserInput.password = hashedPassword;
 
@@ -57,21 +58,17 @@ export class AuthService {
   }
 
   async updateRefreshToken(customer: Customer, refreshToken: string) {
-    const hashedRefreshToken = await hash(refreshToken, 10);
-    customer.refreshToken = hashedRefreshToken;
+    customer.refreshToken = refreshToken;
     await this.customerService.update(customer);
   }
 
   async getTokens(userId: string, username: string): Promise<AuthResponse> {
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync({ sub: userId, username, }, { secret: this.accessSecret, expiresIn: '15m' }),
-      this.jwtService.signAsync({ sub: userId, username, }, { secret: this.refreshSecret, expiresIn: '7d' }),
+      this.jwtService.signAsync({ sub: userId, username }, { secret: this.accessSecret, expiresIn: '15m' }),
+      this.jwtService.signAsync({ sub: userId, username }, { secret: this.refreshSecret, expiresIn: '7d' }),
     ]);
 
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return { accessToken, refreshToken };
   }
 
   async refreshTokens(refreshTokenInput: RefreshTokenInput): Promise<AuthResponse> {
@@ -80,15 +77,19 @@ export class AuthService {
     if (!user || !user.refreshToken)
       throw new ForbiddenException('Access Denied');
 
-    const refreshTokenMatches = verify(
-      user.refreshToken,
-      refreshToken
-    );
+    const refreshTokenMatches = verify(user.refreshToken, this.refreshSecret);
+    if (!refreshTokenMatches)
+      throw new ForbiddenException('Access Denied');
 
-    if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
     const tokens = await this.getTokens(user.id, user.email);
     await this.updateRefreshToken(user, tokens.refreshToken);
     return tokens;
+  }
+
+  private async encript(data: string): Promise<string> {
+    const salt = await genSalt(Number(this.salt));
+    const encripted = await hash(data, salt);
+    return encripted;
   }
 
   generateActivationCode(): string {
