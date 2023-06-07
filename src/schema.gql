@@ -1,0 +1,59 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type Customer {
+  id: ID!
+
+  """Date and time when object was created."""
+  createdAt: Timestamp!
+
+  """Date and time when the object was updated last time."""
+  updatedAt: Timestamp!
+  email: String!
+  password: String!
+  refreshToken: String!
+  activationCode: String!
+  isVerified: Boolean!
+}
+
+"""
+`Date` type as integer. Type represents date and time as number of milliseconds from start of UNIX epoch.
+"""
+scalar Timestamp
+
+type AuthResponse {
+  accessToken: String!
+  refreshToken: String!
+}
+
+type Query {
+  customers: [Customer!]!
+}
+
+type Mutation {
+  verifyAccount(data: VerifyUserInput!): Customer!
+  login(data: LoginUserInput!): AuthResponse!
+  signup(data: CreateUserInput!): AuthResponse!
+  refreshTokens(data: RefreshTokenInput!): AuthResponse!
+}
+
+input VerifyUserInput {
+  email: String!
+  activationCode: String!
+}
+
+input LoginUserInput {
+  email: String!
+  password: String!
+}
+
+input CreateUserInput {
+  email: String!
+  password: String!
+}
+
+input RefreshTokenInput {
+  email: String!
+  refreshToken: String!
+}
